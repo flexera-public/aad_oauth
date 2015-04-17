@@ -23,14 +23,15 @@ import (
 
 const (
 	authHost      = "https://login.windows.net"
-	codeEndpoint  = "/common/oauth2/authorize"
-	tokenEndpoint = "/common/oauth2/token"
+	codeEndpoint  = "/oauth2/authorize"
+	tokenEndpoint = "/oauth2/token"
 )
 
 var (
 	dump         = kingpin.Flag("dump", "Dump request/response").Bool()
 	clientId     = kingpin.Flag("client", "The client id of the application that is registered in Azure Active Directory.").Required().String()
 	clientSecret = kingpin.Flag("secret", "The client key of the application that is registered in Azure Active Directory.").Required().String()
+	tenantId     = kingpin.Flag("tenant", "Azure AD application tenant, leave empty for multi-tenant applications.").String()
 	domainHint   = kingpin.Flag("domain", "Provides a hint about the tenant or domain that the user should use to sign in.").String()
 	loginHint    = kingpin.Flag("hint", "Provides a hint to the user on the sign-in page.").String()
 	prompt       = kingpin.Flag("prompt", "Indicate the type of user interaction that is required.").Enum("login", "consent", "admin_consent")
@@ -109,7 +110,7 @@ func serveHtml(html string, port int) {
 
 // Build request to retrieve authorization code
 func buildAuthCodeRequest() (*http.Request, error) {
-	u, _ := url.Parse(authHost + codeEndpoint)
+	u, _ := url.Parse(endpoint(codeEndpoint))
 	values := u.Query()
 	values.Set("response_type", "code")
 	values.Set("client_id", *clientId)
@@ -129,7 +130,7 @@ func buildAuthCodeRequest() (*http.Request, error) {
 
 // Build request to redeem authorization code and get access token
 func buildAccessTokenRequest(code string) (*http.Request, error) {
-	u, _ := url.Parse(authHost + tokenEndpoint)
+	u, _ := url.Parse(endpoint(tokenEndpoint))
 	data := url.Values{}
 	data.Set("client_id", *clientId)
 	data.Set("client_secret", *clientSecret)
@@ -145,6 +146,18 @@ func buildAccessTokenRequest(code string) (*http.Request, error) {
 		return nil, err
 	}
 	return req, nil
+}
+
+// Compute endpoint taking into account tenantId if any.
+// No tenantId means the application is multi-tenant and uses the "common" namespace to auth.
+func endpoint(suffix string) string {
+	prefix := authHost
+	if *tenantId != "" {
+		prefix += "/" + *tenantId
+	} else {
+		prefix += "/common"
+	}
+	return prefix + "/" + suffix
 }
 
 // Dump request content if required then make request and dump response if needed.
